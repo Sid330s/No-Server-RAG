@@ -14,7 +14,7 @@ import Button from "@cloudscape-design/components/button";
 function WebSocketManager({ user, websocketURL, websocketStateTable, region, toast }) {
   const [connectionId, setConnectionId] = useState("");
   const [creds, setCreds] = useState({});
-  const [hasErrored, setHasErrored] = useState(false);
+  const [hasErrored, setHasErrored] = useState({shouldShow: false, message:""});
   // Getting STS credentials for user
   useEffect(() => {
     const getSession = async () => {
@@ -46,13 +46,13 @@ function WebSocketManager({ user, websocketURL, websocketStateTable, region, toa
         sendMessage(JSON.stringify({ action: "whoami" }))
         setHasErrored(false)
       },
-      onError: (event) => console.log(event) || creds.idToken? setHasErrored(true) : null,
+      onError: (event) => console.log(event) || creds.idToken? setHasErrored({shouldShow: true, message: "Connecting to the backend...", reload:false, title:"Connecting"}) : null,
       heartbeat: {
         interval: 45 * 1000,
         timeout: 60000,
         message: JSON.stringify({ action: "whoami" })
       },
-      onReconnectStop: (event) => console.log("reconnect stop", event) || setHasErrored(true),
+      onReconnectStop: (event) => console.log("reconnect stop", event) || setHasErrored({shouldShow:true, message:"Connection error. Please reload the page or check your internet connectivity.", title: "Error Connecting to the backend",reload: true}),
       shouldReconnect: () => didUnmount.current === false,
       reconnectAttempts: 10,
       reconnectInterval: 3000,
@@ -130,11 +130,12 @@ function WebSocketManager({ user, websocketURL, websocketStateTable, region, toa
     creds.sessionToken, region, websocketStateTable
 ]);
   return <ReloadModal
-    visible={hasErrored}
+    visible={hasErrored.shouldShow}
     setVisible={setHasErrored}
-    message="There was an error connecting to the websocket. Please reload the page."
+    message={hasErrored.message}
     action={onErrorHandler}
-    header="Lost Connection to Backend"
+    header={hasErrored.title}
+    reload={hasErrored.reload}
   />;
 }
 export default withAuthenticator(WebSocketManager);
@@ -145,15 +146,15 @@ WebSocketManager.propTypes = {
   region: PropTypes.string.isRequired,
   toast: PropTypes.func.isRequired
 };
-const ReloadModal =  ({visible, setVisible,  message, action, header}) => {
+const ReloadModal =  ({visible, setVisible,  message, action, header, reload}) => {
   return (
     <Modal
-      onDismiss={() => setVisible(false)}
+      onDismiss={() => setVisible({shouldShow:false, message:""})}
       visible={visible}
       footer={
         <Box float="right">
           <SpaceBetween direction="horizontal" size="xs">
-            <Button variant="primary" onClick={() => action()}>Reload</Button>
+            {reload? <Button variant="primary" onClick={() => action()}>Reload</Button>: null}
           </SpaceBetween>
         </Box>
       }
@@ -164,9 +165,10 @@ const ReloadModal =  ({visible, setVisible,  message, action, header}) => {
   );
 }
 ReloadModal.propTypes = {
-  visible: PropTypes.bool.isRequired,
-  setVisible: PropTypes.func.isRequired,
-  message: PropTypes.string.isRequired,
-  action: PropTypes.func.isRequired,
-  header: PropTypes.string.isRequired
+  visible: PropTypes.bool,
+  setVisible: PropTypes.func,
+  message: PropTypes.string,
+  action: PropTypes.func,
+  header: PropTypes.string,
+  reload: PropTypes.bool
 };
