@@ -61,7 +61,6 @@ samconfig.toml
 .aws-sam
 output.txt
 response.json
-package-lock.json
 cdk.out
 dist/*
 /.idea/vcs.xml
