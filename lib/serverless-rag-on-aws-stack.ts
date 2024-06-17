@@ -19,6 +19,7 @@ import {
   CfnOutput,
   aws_lambda_nodejs as node,
   DockerImage,
+  aws_ssm as ssm,
 } from 'aws-cdk-lib';
 import * as path from "path";
 import { Construct } from 'constructs';
@@ -28,6 +29,8 @@ import {
   execSync,
 } from "node:child_process";
 import { Utils } from "./utils";
+import * as fs from 'fs';
+import * as yaml from 'js-yaml';
 const pythonRuntime = lambda.Runtime.PYTHON_3_11;
 const lambdaArchitecture = lambda.Architecture.X86_64;
 export class ServerlessRagOnAws extends Stack {
@@ -185,6 +188,18 @@ export class ServerlessRagOnAws extends Stack {
       stageName: 'Prod',
       autoDeploy: true,
     });
+    // Read the prompt-templates YAML file
+    const filePath = path.join(__dirname, 'prompt-templates.yml');
+    const fileContents = fs.readFileSync(filePath, 'utf8');
+    // Parse the prompt-templates YAML file
+    const data = yaml.load(fileContents) as Record<string, string>;
+    // Create the SSM parameters
+    for (const key in data) {
+      new ssm.StringParameter(this, `${key}SSMParameter`, {
+        parameterName: `/${this.stackName}/default/${key}`,
+        stringValue: data[key],
+      });
+    }
     // Lambda function for authorizer
     const authorizerFunction = new node.NodejsFunction(this, 'WsLambdaAuthorizer', {
       entry: path.join(__dirname, '../lambda/websocket-authorizer/index.mjs'),
@@ -365,6 +380,7 @@ export class ServerlessRagOnAws extends Stack {
       environment: {
         s3BucketName: lanceDbVectorBucket.bucketName,
         region: this.region,
+        stackName: this.stackName,
         LANGCHAIN_VERBOSE: 'true',
         USER_POOL_ID: frontendAuth.resources.userPool.userPoolId,
         IDENTITY_POOL_ID: frontendAuth.resources.cfnResources.cfnIdentityPool.ref
@@ -376,6 +392,7 @@ export class ServerlessRagOnAws extends Stack {
       actions: [
         'bedrock:InvokeModel',
         'bedrock:InvokeModelWithResponseStream',
+        'ssm:GetParameter',
       ],
       resources: ['*'],
     }));
