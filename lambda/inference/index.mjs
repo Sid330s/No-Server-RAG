@@ -13,15 +13,20 @@ const lanceDbSrc = process.env.s3BucketName;
 const awsRegion = process.env.region;
 const stackName = process.env.stackName;
 const runChain = async ({identityId, query, model, streamingFormat, promptOverride}, responseStream) => {
-    const db = await connect(`s3://${lanceDbSrc}/embeddings/${identityId}`);
-    const table = await db.openTable(identityId);
+    let db, table, vectorStore, embeddings, retriever;
+    try{
+        db = await connect(`s3://${lanceDbSrc}/embeddings/${identityId}`);
+        table = await db.openTable(identityId);
+        embeddings = new BedrockEmbeddings({region:awsRegion});
+        vectorStore = new LanceDB(embeddings, {table});
+        retriever = vectorStore.asRetriever();
+    }catch(error){
+        console.log("Could not load user's Lance table. Probably they haven't uploaded any documents yet", error);
+    }
     console.log('identityId', identityId);
     console.log('query', query);
     console.log('model', model);
     console.log('streamingFormat', streamingFormat);
-    const embeddings = new BedrockEmbeddings({region:awsRegion});
-    const vectorStore = new LanceDB(embeddings, {table});
-    const retriever = vectorStore.asRetriever();
     const ssmClient = new SSMClient({region:awsRegion});
     let promptHeader, noContextFooter, contextFooter;
     try {
