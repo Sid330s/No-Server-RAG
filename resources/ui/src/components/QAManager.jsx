@@ -45,10 +45,10 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
           values: parsedPrompt
         }
       }
-      return {
-        isModified: false,
-        values:[]
-      }
+    }
+    return {
+      isModified: false,
+      values:[]
     }
   });
   // when searchQuery changes, store it into the local storage
