@@ -16,7 +16,6 @@ import Documents from "./components/Documents/Documents.jsx";
 import WebSocketManager from './components/WebSocketManager';
 import { ToastContainer, toast } from 'react-toastify';
 import 'react-toastify/dist/ReactToastify.css';
-import Settings from "./components/Settings/Settings.jsx";
 export default function AppConfigured() {
   const { tokens } = useTheme();
   const [config, setConfig] = useState(null);
@@ -105,7 +104,6 @@ export default function AppConfigured() {
               <Routes>
                 <Route path="/" element={ <App  appConfig={config}/>} />
                 <Route path="/Documents" element={ <Documents appConfig={config}/>} />
-                <Route path="/Settings" element={ <Settings appConfig={config}/>} />
               </Routes>
             }
           />

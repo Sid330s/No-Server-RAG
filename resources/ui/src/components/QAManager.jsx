@@ -9,7 +9,6 @@ import rehypeRaw from 'rehype-raw'
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import darkMarkdown from '../static/themes/awsDark.js';
 import lightMarkdown from '../static/themes/awsLight.js';
-import { useNavigate } from "react-router-dom";
 import {
   Container,
   Select,
@@ -24,37 +23,13 @@ import {
 import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 import { streamingLambda, syncLambda } from './helpers';
 export function QAManager({ inferenceURL, creds, region, appConfig }) {
-  const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState(() => {
-    const savedQuery = localStorage.getItem('searchQuery');
-    return savedQuery || '';
-  });
+  const [searchQuery, setSearchQuery] = useState("");
   const [models, setModels] = useState([]);
   const localStorageModel = localStorage.getItem('llm_model_id') || 'loading...';
   const [model, setModel] = useState(localStorageModel);
   const [searching, setSearching] = useState();
   const [metadata, setMetadata] = useState([]);
   const [results, setResults] = useState([]);
-  const [systemPrompt, setSystemPrompt] = useState(() => {
-    const savedPrompt = localStorage.getItem('parameterEditorState');
-    if(savedPrompt){
-      const parsedPrompt = JSON.parse(savedPrompt);
-      if (parsedPrompt.some(item => item.isChecked)) {
-        return {
-          isModified: true,
-          values: parsedPrompt
-        }
-      }
-      return {
-        isModified: false,
-        values:[]
-      }
-    }
-  });
-  // when searchQuery changes, store it into the local storage
-  useEffect(() => {
-      localStorage.setItem('searchQuery', searchQuery);
-  });
   const clearResponse = () => {
     setSearching(false);
     setMetadata([]);
@@ -85,17 +60,6 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
       console.error('Error generating pre-signed URL', error);
     }
   };
-  const getPromptOverrideObject = (systemPromptState) =>{
-    console.log("getPromptOverrideObject");
-    console.log(systemPromptState);
-    const override = {};
-    for (const prompt of systemPromptState.values){
-      if(prompt.isChecked){
-        override[prompt.name.split("/").pop()] = prompt.userInput;
-      }
-    }
-    return override;
-  }
   const getData = async (streaming = true) => {
     clearResponse();
     setSearching(true);
@@ -113,10 +77,8 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
       // TODO:  hange this to sync endpoint?
       apiUrl = new URL(inferenceURL);
     }
-    const promptOverride = getPromptOverrideObject(systemPrompt);
     const requestBody = {
       query: searchQuery,
-      promptOverride,
       strategy: "rag",
       model: model,
       idToken: creds.idToken.toString()
@@ -214,13 +176,6 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
             options={models}
           />
         </FormField>
-        { 
-          systemPrompt?.isModified 
-            && 
-          <span> 
-            You have modified the system prompt. You can switch back to the default prompt by navigating to <Link onFollow={() => navigate("/Settings")}>Settings</Link>
-          </span>
-        }
         <Textarea onChange={({ detail }) => setSearchQuery(detail.value)} value={searchQuery}></Textarea>
       <div>
         <Button disabled={searchQuery.length===0 && model !== 'none'} variant="primary" iconName="search" loading={searching} onClick={() => getData(true)}>Submit Question</Button>
