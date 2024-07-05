@@ -8,7 +8,6 @@ import Markdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw'
 import {Prism as SyntaxHighlighter} from 'react-syntax-highlighter'
 import darkMarkdown from '../static/themes/awsDark.js';
-import lightMarkdown from '../static/themes/awsLight.js';
 import { useNavigate } from "react-router-dom";
 import {
   Container,
@@ -20,7 +19,6 @@ import {
   FormField,
   Link, 
   Box,
-  Checkbox,
 } from '@cloudscape-design/components'
 import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 import { streamingLambda, syncLambda } from './helpers';
