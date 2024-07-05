@@ -1,24 +1,19 @@
 import { LanceDB }from "@langchain/community/vectorstores/lancedb";
 import { BedrockEmbeddings } from "@langchain/community/embeddings/bedrock";
 import { connect } from "vectordb"; // LanceDB
-import { PromptTemplate } from "@langchain/core/prompts";
-import { BedrockChat }  from "@langchain/community/chat_models/bedrock";
-import { StringOutputParser } from "@langchain/core/output_parsers";
-import { RunnableSequence, RunnablePassthrough } from "@langchain/core/runnables";
 import { formatDocumentsAsString } from "langchain/util/document";
 import { CognitoIdentityClient, GetIdCommand } from "@aws-sdk/client-cognito-identity";
 import { SSMClient, GetParameterCommand } from "@aws-sdk/client-ssm";
 import jwt from "jsonwebtoken";
-import {
-    BedrockClient,
-    ListFoundationModelsCommand,
-  } from "@aws-sdk/client-bedrock";
+import { BedrockClient, ListFoundationModelsCommand } from "@aws-sdk/client-bedrock";
+import { BedrockRuntimeClient, ConverseStreamCommand, ConverseCommand } from "@aws-sdk/client-bedrock-runtime";
 const lanceDbSrc = process.env.s3BucketName;
 const awsRegion = process.env.region;
 const stackName = process.env.stackName;
 const embeddingModel = process.env.EMBEDDING_MODEL;
 let foundationModels = [];
 const client = new BedrockClient({ region: awsRegion });
+const bedrockRuntimeClient = new BedrockRuntimeClient({ region: awsRegion });
 const isResponseStreamingSupported = async (modelId) => {
     let streaming = false;
     if (foundationModels.length === 0) {
@@ -61,7 +56,7 @@ const runChain = async ({identityId, query, model, streamingFormat, promptOverri
         ]);
     } catch (error) {
         console.error('An error occurred while fetching SSM parameters:', error);
-        responseStream.write(`An error occurred while fetching prompts from SSM parameters.\n ${e.message}`);
+        responseStream.write(`An error occurred while fetching prompts from SSM parameters.\n ${error.message}`);
         responseStream.end();
         return;
     }
@@ -79,12 +74,6 @@ const runChain = async ({identityId, query, model, streamingFormat, promptOverri
         responseStream.end();
         return;
     }
-    const llmModel = new BedrockChat({
-        model: model || 'anthropic.claude-instant-v1',
-        region: awsRegion,
-        streaming: streaming,
-        maxTokens: 1000,
-    });
     let docs, docsAsString, documentMetadata;
     try{
         docs = await retriever.invoke(query);
@@ -98,40 +87,60 @@ const runChain = async ({identityId, query, model, streamingFormat, promptOverri
     }
     let compiledPrompt;
     if(!docs || docs.length === 0){
-        compiledPrompt = PromptTemplate.fromTemplate(promptHeader + noContextFooter);
+        compiledPrompt = String(promptHeader + noContextFooter).replace('{context}', docsAsString).replace('{question}',query);
     }else{
-        compiledPrompt = PromptTemplate.fromTemplate(promptHeader + contextFooter);
+        compiledPrompt = String(promptHeader + contextFooter).replace('{context}', docsAsString).replace('{question}',query);
     }
-    const chain = RunnableSequence.from([
+    console.log(compiledPrompt);
+    const conversation = [
         {
-            context: () => docsAsString,
-            question: new RunnablePassthrough(query)
+          role: "user",
+          content: [{ text: compiledPrompt }],
         },
-        compiledPrompt,
-        llmModel,
-        new StringOutputParser()
-    ]);
+    ];
     let stream;
-    try{
+    try{            
+        responseStream.write(`_~_${JSON.stringify(documentMetadata)}_~_\n\n`);
         if (streaming){
-            stream = await chain.stream(query);
-            responseStream.write(`_~_${JSON.stringify(documentMetadata)}_~_\n\n`);
-            for await (const chunk of stream){
-                console.log(chunk);
-                switch (streamingFormat) {
-                    case 'fetch-event-source':
-                        responseStream.write(`event: message\n`);
-                        responseStream.write(`data: ${chunk}\n\n`);
-                        break;
-                    default:
-                        responseStream.write(chunk);
-                        break;
+            const command = new ConverseStreamCommand({
+                modelId: model,
+                messages: conversation,
+                inferenceConfig: { maxTokens: 1000, temperature: 0.0, topP: 0.9 },
+            });
+            const response = await bedrockRuntimeClient.send(command);
+            // Extract and print the streamed response text in real-time.
+            for await (const item of response.stream) {
+                if (item.contentBlockDelta) {
+                    console.log(item.contentBlockDelta.delta?.text);
+                    switch (streamingFormat) {
+                        case 'fetch-event-source':
+                            responseStream.write(`event: message\n`);
+                            responseStream.write(`data: ${item.contentBlockDelta.delta?.text}\n\n`);
+                            break;
+                        default:
+                            responseStream.write(item.contentBlockDelta.delta?.text);
+                            break;
+                    }
                 }
             }
         } else {
-            stream = await chain.invoke(query);
-            console.log(stream);
-            responseStream.write(stream);
+            const command = new ConverseCommand({
+                modelId: model,
+                messages: conversation,
+                inferenceConfig: { maxTokens: 1000, temperature: 0.0, topP: 0.9 },
+            });
+            const response = await bedrockRuntimeClient.send(command);
+            const responseText = response.output.message.content[0].text;
+            console.log(responseText);
+            switch (streamingFormat) {
+                case 'fetch-event-source':
+                    responseStream.write(`event: message\n`);
+                    responseStream.write(`data: ${responseText}\n\n`);
+                    break;
+                default:
+                    responseStream.write(responseText);
+                    break;
+            }
         }
     }catch(e){
         console.log(e);
