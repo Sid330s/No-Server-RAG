@@ -420,6 +420,7 @@ export class ServerlessRagOnAws extends Stack {
       actions: [
         'bedrock:InvokeModel',
         'bedrock:InvokeModelWithResponseStream',
+        'bedrock:ListFoundationModels',
         'ssm:GetParameter',
       ],
       resources: ['*'],

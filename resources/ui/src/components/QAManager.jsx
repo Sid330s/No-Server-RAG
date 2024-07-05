@@ -26,7 +26,6 @@ import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedr
 import { streamingLambda, syncLambda } from './helpers';
 export function QAManager({ inferenceURL, creds, region, appConfig }) {
   const navigate = useNavigate();
-  const [enableStreaming, setEnableStreaming] = React.useState(false);
   const [searchQuery, setSearchQuery] = useState(() => {
     const savedQuery = localStorage.getItem('searchQuery');
     return savedQuery || '';
@@ -121,7 +120,6 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
       promptOverride,
       strategy: "rag",
       model: model,
-      streaming: enableStreaming,
       idToken: creds.idToken.toString()
     }
     try {
@@ -217,14 +215,6 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
             options={models}
           />
         </FormField>
-          <Checkbox
-            onChange={({ detail }) =>
-              setEnableStreaming(detail.checked)
-            }
-            checked={enableStreaming}
-          >
-            Streaming
-          </Checkbox>
         { 
           systemPrompt?.isModified 
             && 
