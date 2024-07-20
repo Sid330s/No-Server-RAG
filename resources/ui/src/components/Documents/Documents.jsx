@@ -7,6 +7,9 @@ import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import {
     withAuthenticator,
   } from '@aws-amplify/ui-react';
+import {
+    Container,
+} from '@cloudscape-design/components'
 function Documents({ signOut, user, appConfig }) {
   const [remoteFiles, setRemoteFiles] = useState([]);
   const [remoteFilesLoading, setRemoteFilesLoading] = useState(false);
@@ -93,6 +96,7 @@ function Documents({ signOut, user, appConfig }) {
     getSession();
   }, [user]);
   return (
+    <Container>
     <FileViewTable
         tableItems={remoteFiles}
         loading={remoteFilesLoading}
@@ -101,6 +105,7 @@ function Documents({ signOut, user, appConfig }) {
         deleteFiles={deleteFiles}
         creds={creds}
     />
+    </Container>
   );
 }
 export default withAuthenticator(Documents);

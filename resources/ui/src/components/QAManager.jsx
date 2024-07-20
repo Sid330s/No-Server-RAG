@@ -19,6 +19,7 @@ import {
   FormField,
   Link, 
   Box,
+  Alert,
 } from '@cloudscape-design/components'
 import { BedrockClient, ListFoundationModelsCommand } from '@aws-sdk/client-bedrock';
 import { streamingLambda, syncLambda } from './helpers';
@@ -40,6 +41,8 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
   const [searching, setSearching] = useState();
   const [metadata, setMetadata] = useState([]);
   const [results, setResults] = useState([]);
+  // checks if any of the system prompts have been overridden
+  // if so, sets isModified to true, so that we can display a warning to the user
   const [systemPrompt, setSystemPrompt] = useState(() => {
     const savedPrompt = localStorage.getItem('parameterEditorState');
     if(savedPrompt){
@@ -101,25 +104,27 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
     }
     return override;
   }
-  const appendQuestionToHistory = question => {
+  const prependQuestionToHistory = question => {
     const newQAPair = {
       question,
-      answer: ''
+      answer: '',
+      date: new Date().toISOString(),
+      checked: false
     }
-    const updatedChatHistory = [...chatHistory, newQAPair];
+    const updatedChatHistory = [newQAPair, ...chatHistory];
     localStorage.setItem('chat_history', JSON.stringify(updatedChatHistory));
   }
-  const appendResponseToLastQuestionInChatHistory = answer => {
-    const lastMessage = chatHistory.pop();
+  const setResponseToLastQuestionInChatHistory = answer => {
+    const lastMessage = chatHistory.shift();
     if(!lastMessage) return;
     lastMessage.answer = answer;
-    chatHistory.push(lastMessage);
+    lastMessage.checked = true;
+    chatHistory.unshift(lastMessage);
     localStorage.setItem('chat_history', JSON.stringify(chatHistory));
   }
   const getData = async (streaming = true) => {
-    results?.length > 0 && appendResponseToLastQuestionInChatHistory(results?.join(""));
-    appendQuestionToHistory(searchQuery);
     clearResponse();
+    prependQuestionToHistory(searchQuery);
     setSearching(true);
     const sigv4 = new SignatureV4({
       service: "lambda",
@@ -137,15 +142,24 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
       apiUrl = new URL(inferenceURL);
     }
     const promptOverride = getPromptOverrideObject(systemPrompt);
-    const sendHistory = `<history>${chatHistory.slice(-5).reverse().map(x => `question:${x.question}\nanswer:${x.answer}`).reduce((memo, next) => {memo += next; return memo}, "")}</history>`;
+    const compiledHistory = `<history>
+      ${
+        chatHistory
+          .filter(x => x.checked)
+          .map(
+            x => `question:${x.question}\nanswer:${x.answer}\n`
+          ).join("")
+      }
+    </history>`;
     const requestBody = {
       query: searchQuery,
       promptOverride,
       strategy: "rag",
       model: model,
       idToken: creds.idToken.toString(),
-      history: sendHistory
-    }
+      history: compiledHistory
+    };
+    console.log(requestBody);
     try {
       const signed = await sigv4.sign({
         body: JSON.stringify(requestBody),
@@ -176,6 +190,13 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
       console.error("Error streaming data: ", error);
     }
   };
+  // whenever results changes, add its content into the last pair of questions and anwers
+  useEffect(() => {
+    if (results?.length > 0) {
+      setResponseToLastQuestionInChatHistory(results?.join(""));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [results]);
   const getModelsFromBedrock = async () => {
     const bedrockClient = new BedrockClient({
       region: region,
@@ -242,11 +263,19 @@ export function QAManager({ inferenceURL, creds, region, appConfig }) {
         { 
           systemPrompt?.isModified 
             && 
-          <span> 
-            You have modified the system prompt. You can switch back to the default prompt by navigating to <Link onFollow={() => navigate("/Settings")}>Settings</Link>
-          </span>
+          <Alert statusIconAriaLabel="Info"> 
+            You have modified the system prompt. You can switch back to the default prompt by navigating to <Link onFollow={() => navigate("/Settings")}>System Prompt Settings</Link>
+          </Alert>
+        }
+        {
+          chatHistory.some( item => item.checked) &&
+          <Alert statusIconAriaLabel="Info">
+            Some of your Chat History will be forwarded to the inference endpoint. You can manage your ChatHistory by navigating to <Link onFollow={() => navigate("/ChatHistory")}>Chat&nbsp;History</Link>
+          </Alert>
         }
         <Textarea onChange={({ detail }) => setSearchQuery(detail.value)} value={searchQuery}></Textarea>
+      <div>
+      </div>
       <div>
         <Button disabled={searchQuery.length===0 && model !== 'none'} variant="primary" iconName="search" loading={searching} onClick={() => getData(true)}>Submit Question</Button>
       </div>
