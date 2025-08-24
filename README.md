@@ -17,7 +17,8 @@ Built using **AWS CDK**, **Lambda**, **S3**, **LanceDB**, and a modern **React f
 
 A high-level view of the system components:
 
-![Architecture Diagram](diagrams/Architecture.svg)
+![587FA982-50BF-425D-89FF-5292C0C5CB5A](https://github.com/user-attachments/assets/c5f27d09-645d-46b3-89fd-3bf50bfba8c0)
+
 
 This system uses:
 - **Amazon Bedrock** for LLM inference and embeddings
